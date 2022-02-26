@@ -80,6 +80,22 @@ If nil, this defaults to the SHELL environment variable."
     (switch-to-buffer vterm-buffer)))
 
 ;;;###autoload
+(defun multi-vterm-select-or-create ()
+  "Select a vterm buffer or create a new one."
+  (interactive)
+
+  (let* ((vterm-buffer (completing-read
+                        "Select terminal buffer: "
+                        (mapcar 'buffer-name multi-vterm-buffer-list)
+                        nil nil)))
+    (if (member vterm-buffer (mapcar 'buffer-name multi-vterm-buffer-list))
+        (switch-to-buffer vterm-buffer)
+      (progn
+        (multi-vterm)
+        (multi-vterm-rename-buffer vterm-buffer)))))
+
+
+;;;###autoload
 (defun multi-vterm-project ()
   "Create new vterm buffer."
   (interactive)
