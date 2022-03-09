@@ -55,7 +55,7 @@ If nil, this defaults to the SHELL environment variable."
   :group 'multi-vterm)
 
 ;; Contants
-(defconst multi-vterm-dedicated-buffer-name "dedicated"
+(defconst multi-vterm-dedicated-buffer-name nil
   "The dedicated vterm buffer name.")
 
 ;; Variables
@@ -83,16 +83,40 @@ If nil, this defaults to the SHELL environment variable."
 (defun multi-vterm-select-or-create ()
   "Select a vterm buffer or create a new one."
   (interactive)
-
-  (let* ((vterm-buffer (completing-read
+  (let* ((vterm-buffer-name (completing-read
                         "Select terminal buffer: "
-                        (mapcar 'buffer-name multi-vterm-buffer-list)
+                        (mapcar 'multi-vterm-extract-buffer-name multi-vterm-buffer-list)
                         nil nil)))
-    (if (member vterm-buffer (mapcar 'buffer-name multi-vterm-buffer-list))
-        (switch-to-buffer vterm-buffer)
+    (if (member vterm-buffer-name (mapcar 'multi-vterm-extract-buffer-name multi-vterm-buffer-list))
+        (switch-to-buffer (multi-vterm-format-buffer-name vterm-buffer-name))
       (progn
         (multi-vterm)
-        (multi-vterm-rename-buffer vterm-buffer)))))
+        (multi-vterm-rename-buffer vterm-buffer-name)))))
+
+;;;###autoload
+(defun multi-vterm-dedicated-select-or-create ()
+  "Select a vterm buffer or create a new one."
+  (interactive)
+  (let* ((vterm-buffer-name (completing-read
+                        "Select terminal buffer: "
+                        (mapcar 'multi-vterm-extract-buffer-name multi-vterm-buffer-list)
+                        nil nil)))
+    (setq multi-vterm-dedicated-buffer-name vterm-buffer-name
+          multi-vterm-dedicated-buffer (get-buffer
+                                        (multi-vterm-format-buffer-name
+                                         multi-vterm-dedicated-buffer-name)))
+    (unless multi-vterm-dedicated-buffer
+      (setq multi-vterm-dedicated-buffer
+            (get-buffer-create
+             (multi-vterm-format-buffer-name
+              multi-vterm-dedicated-buffer-name)))
+      (with-current-buffer multi-vterm-dedicated-buffer
+        (vterm-mode)))
+
+    (unless (member vterm-buffer-name (mapcar 'multi-vterm-extract-buffer-name multi-vterm-buffer-list))
+      (add-to-list 'multi-vterm-buffer-list multi-vterm-dedicated-buffer))
+
+    (multi-vterm-dedicated-open)))
 
 
 ;;;###autoload
@@ -109,7 +133,7 @@ If nil, this defaults to the SHELL environment variable."
           (set-buffer vterm-buffer)
           (multi-vterm-internal)
           (switch-to-buffer-other-window vterm-buffer)))
-    (message "This file is not in a project")))
+    (error "This file is not in a project")))
 
 ;;;###autoload
 (defun multi-vterm-dedicated-open ()
@@ -125,8 +149,7 @@ If nil, this defaults to the SHELL environment variable."
         (multi-vterm-internal)))
   (set-window-buffer multi-vterm-dedicated-window (get-buffer (multi-vterm-dedicated-get-buffer-name)))
   (set-window-dedicated-p multi-vterm-dedicated-window t)
-  (select-window multi-vterm-dedicated-window)
-  (message "`multi-vterm' dedicated window has exist."))
+  (select-window multi-vterm-dedicated-window))
 
 ;;;###autoload
 (defun multi-vterm-dedicated-close ()
@@ -134,11 +157,10 @@ If nil, this defaults to the SHELL environment variable."
   (interactive)
   (if (multi-vterm-dedicated-exist-p)
       (let ((current-window (selected-window)))
-        (multi-vterm-dedicated-select)
+        (select-window multi-vterm-dedicated-window)
         (delete-window multi-vterm-dedicated-window)
         (if (multi-vterm-window-exist-p current-window)
-            (select-window current-window)))
-    (message "`multi-vterm' window does not exist.")))
+            (select-window current-window)))))
 
 ;;;###autoload
 (defun multi-vterm-dedicated-toggle ()
@@ -146,15 +168,9 @@ If nil, this defaults to the SHELL environment variable."
   (interactive)
   (if (multi-vterm-dedicated-exist-p)
       (multi-vterm-dedicated-close)
-    (multi-vterm-dedicated-open)))
-
-;;;###autoload
-(defun multi-vterm-dedicated-select ()
-  "Select the `multi-vterm' dedicated window."
-  (interactive)
-  (if (multi-vterm-dedicated-exist-p)
-      (select-window multi-vterm-dedicated-window)
-    (message "`multi-vterm' window does not exist.")))
+    (if multi-vterm-dedicated-buffer
+        (multi-vterm-dedicated-open)
+      (multi-vterm-dedicated-select-or-create))))
 
 (defun multi-vterm-get-buffer (&optional dedicated-window)
   "Get vterm buffer name based on DEDICATED-WINDOW.
@@ -196,13 +212,22 @@ Optional argument DEDICATED-WINDOW: There are three types of DEDICATED-WINDOW: d
   (interactive "MRename vterm buffer: ")
   (rename-buffer (multi-vterm-format-buffer-name name)))
 
+(defun multi-vterm-extract-buffer-name (buffer)
+  "Extract the terminal's name from the BUFFER-NAME."
+  (let* ((buffer-name (buffer-name buffer)))
+    (if buffer-name
+        (save-match-data
+          (string-match (format "^\\*%s - \\(.*\\)\\*" multi-vterm-buffer-name) buffer-name)
+          (match-string 1 buffer-name))
+      "")))
+
 (defun multi-vterm-format-buffer-name (name)
   "Format vterm buffer NAME."
   (format "*%s - %s*" multi-vterm-buffer-name name))
 
 (defun multi-vterm-format-buffer-index (index)
   "Format vterm buffer name with INDEX."
-  (format "*%s<%s>*" multi-vterm-buffer-name index))
+  (format "*%s - %s*" multi-vterm-buffer-name index))
 
 (defun multi-vterm-handle-close ()
   "Close current vterm buffer when `exit' from vterm buffer."
@@ -243,7 +268,10 @@ Option OFFSET for skip OFFSET number term buffer."
   (when (eq major-mode 'vterm-mode)
     (let ((killed-buffer (current-buffer)))
       (setq multi-vterm-buffer-list
-            (delq killed-buffer multi-vterm-buffer-list)))))
+            (delq killed-buffer multi-vterm-buffer-list))
+      (when (eq killed-buffer multi-vterm-dedicated-buffer)
+        (setq multi-vterm-dedicated-buffer nil
+              multi-vterm-dedicated-buffer-name nil)))))
 
 (defun multi-vterm-shell-name ()
   "Get shell-name based on var `multi-vterm-program' or env SHELL or default `shell-file-name'."
