@@ -4,7 +4,7 @@
 ;; URL: https://github.com/suonlight/multi-libvterm
 ;; Keywords: terminals, processes
 ;; Version: 1.0
-;; Package-Requires: ((emacs "26.3") (vterm "0.0") (project "0.3.0"))
+;; Package-Requires: ((emacs "26.3") (vterm "0.0"))
 ;;
 ;;; Commentary:
 ;; Managing multiple vterm buffers in Emacs
@@ -28,8 +28,8 @@
 ;; Features that might be required by this library:
 ;;
 ;;  `vterm'
-;;  `project'
 ;;; Code:
+
 (require 'cl-lib)
 (require 'vterm)
 (require 'project)
